@@ -66,14 +66,23 @@ void vMBPortClose(void) {
 	extern void vMBPortSerialClose(void);
 	extern void vMBPortTimerClose(void);
 	extern void vMBPortEventClose(void);
+#if MB_MASTER_RTU_ENABLED > 0 || MB_MASTER_ASCII_ENABLED > 0
+	vMBMasterPortClose();
+	vMBMasterPortTimerClose();
+	vMBMasterPortEventClose();
+#endif
+#if MB_SLAVE_RTU_ENABLED > 0 || MB_SLAVE_ASCII_ENABLED > 0
 	vMBPortSerialClose();
 	vMBPortTimerClose();
 	vMBPortEventClose();
+#endif
 }
 
 void rescheduleJbus485FromIsr(void) {
 }
 
 void port_halt(void) {
+#if MB_PORT_HAS_CLOSE
 	vMBPortClose();
+#endif
 }

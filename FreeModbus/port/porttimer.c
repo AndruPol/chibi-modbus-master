@@ -110,5 +110,5 @@ vMBPortTimersDelay( USHORT usTimeOutMS )
 #endif
 
 void vMBPortTimerClose(void) {
-	gptStop(&GPTDRIVER);
+	vMBPortTimersDisable();
 }

@@ -40,57 +40,53 @@
 /* ----------------------- Variables ----------------------------------------*/
 static msg_t xMasterQueueBuf;
 static mailbox_t xMasterQueueHdl;
+static msg_t xMasterCBQueueBuf;
+static mailbox_t xMasterCBQueueHdl;
 static binary_semaphore_t xMasterRunRes;
 
 /* ----------------------- Start implementation -----------------------------*/
 
 BOOL xMBMasterPortEventInit(void) {
 	chMBObjectInit(&xMasterQueueHdl, &xMasterQueueBuf, 1);
+	chMBObjectInit(&xMasterCBQueueHdl, &xMasterCBQueueBuf, 1);
 	return true;
 }
 
 BOOL xMBMasterPortEventPost(eMBMasterEventType eEvent) {
 
 	if (bMBPortIsWithinException() == TRUE) {
-		if (chMBPostI(&xMasterQueueHdl, (msg_t) eEvent) != MSG_OK)
-			return false;
+		if ((eEvent & EV_MASTER_READY) || (eEvent & EV_MASTER_FRAME_RECEIVED) ||
+			(eEvent & EV_MASTER_EXECUTE) || (eEvent & EV_MASTER_FRAME_SENT) ||
+			(eEvent & EV_MASTER_ERROR_PROCESS)) {
+			if (chMBPostI(&xMasterQueueHdl, (msg_t) eEvent) != MSG_OK)
+				return false;
+		} else {
+			if (chMBPostI(&xMasterCBQueueHdl, (msg_t) eEvent) != MSG_OK)
+				return false;
+		}
 	} else {
-		if (chMBPost(&xMasterQueueHdl, (msg_t) eEvent, MS2ST(50)) != MSG_OK)
-			return false;
+		if ((eEvent & EV_MASTER_READY) || (eEvent & EV_MASTER_FRAME_RECEIVED) ||
+			(eEvent & EV_MASTER_EXECUTE) || (eEvent & EV_MASTER_FRAME_SENT) ||
+			(eEvent & EV_MASTER_ERROR_PROCESS)) {
+			if (chMBPost(&xMasterQueueHdl, (msg_t) eEvent, MS2ST(50)) != MSG_OK)
+				return false;
+		} else {
+			if (chMBPost(&xMasterCBQueueHdl, (msg_t) eEvent, MS2ST(50)) != MSG_OK)
+				return false;
+		}
 	}
 
 	return true;
 }
 
 BOOL xMBMasterPortEventGet(eMBMasterEventType * peEvent) {
-	eMBMasterEventType recvedEvent;
 
 	if (bMBPortIsWithinException() == TRUE) {
-		if (chMBFetchI(&xMasterQueueHdl, (msg_t *) &recvedEvent) != MSG_OK)
+		if (chMBFetchI(&xMasterQueueHdl, (msg_t *) peEvent) != MSG_OK)
 			return false;
-		if ((recvedEvent & EV_MASTER_READY) || (recvedEvent & EV_MASTER_FRAME_RECEIVED) ||
-			(recvedEvent & EV_MASTER_EXECUTE) || (recvedEvent & EV_MASTER_FRAME_SENT) ||
-			(recvedEvent & EV_MASTER_ERROR_PROCESS)) {
-			*peEvent = recvedEvent;
-			return true;
-		} else {
-			chMBPostI(&xMasterQueueHdl, (msg_t) recvedEvent);
-		}
 	} else {
-		do {
-			chMBFetch(&xMasterQueueHdl, (msg_t *) &recvedEvent, TIME_INFINITE);
-			chSysLock();
-			if ((recvedEvent & EV_MASTER_READY) || (recvedEvent & EV_MASTER_FRAME_RECEIVED) ||
-					(recvedEvent & EV_MASTER_EXECUTE) || (recvedEvent & EV_MASTER_FRAME_SENT) ||
-					(recvedEvent & EV_MASTER_ERROR_PROCESS)) {
-				*peEvent = recvedEvent;
-				chSysUnlock();
-				return true;
-			}
-			chMBPostS(&xMasterQueueHdl, (msg_t) recvedEvent, TIME_IMMEDIATE);
-			chSysUnlock();
-			chThdSleepMilliseconds(10);
-		} while (true);
+		if (chMBFetch(&xMasterQueueHdl, (msg_t *) peEvent, TIME_INFINITE) == MSG_OK)
+			return true;
 	}
 
 	return false;
@@ -235,18 +231,8 @@ eMBMasterReqErrCode eMBMasterWaitRequestFinish(void) {
 	eMBMasterEventType recvedEvent;
 
 	/* waiting for OS event */
-	do {
-		chMBFetch(&xMasterQueueHdl, (msg_t *) &recvedEvent, TIME_INFINITE);
-		chSysLock();
-		if ((recvedEvent & EV_MASTER_PROCESS_SUCESS) || (recvedEvent & EV_MASTER_ERROR_RESPOND_TIMEOUT) ||
-			(recvedEvent & EV_MASTER_ERROR_RECEIVE_DATA) || (recvedEvent & EV_MASTER_ERROR_EXECUTE_FUNCTION)) {
-			chSysUnlock();
-			break;
-		}
-		chMBPostS(&xMasterQueueHdl, (msg_t) recvedEvent, TIME_IMMEDIATE);
-		chSysUnlock();
-		chThdSleepMilliseconds(10);
-	} while (true);
+	if (chMBFetch(&xMasterCBQueueHdl, (msg_t *) &recvedEvent, MS2ST(MB_MASTER_TIMEOUT_MS_RESPOND)) != MSG_OK)
+		return MB_MRE_TIMEDOUT;
 
 	switch (recvedEvent) {
 	case EV_MASTER_PROCESS_SUCESS:
@@ -260,9 +246,6 @@ eMBMasterReqErrCode eMBMasterWaitRequestFinish(void) {
 	case EV_MASTER_ERROR_EXECUTE_FUNCTION:
 		eErrStatus = MB_MRE_EXE_FUN;
 		break;
-	default:
-		xMBMasterPortEventPost(recvedEvent);
-		break;
 	}
 
 	return eErrStatus;
@@ -270,5 +253,6 @@ eMBMasterReqErrCode eMBMasterWaitRequestFinish(void) {
 
 void vMBMasterPortEventClose(void) {
 	chMBReset(&xMasterQueueHdl);
+	chMBReset(&xMasterCBQueueHdl);
 	chBSemReset(&xMasterRunRes, false);
 }

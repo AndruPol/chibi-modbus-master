@@ -222,7 +222,6 @@ void vMBPortSerialClose(void) {
 #if BOARD_MAX485
 		palClearPad(BOARD_MAX485_PORT, BOARD_MAX485_PIN);
 #endif
-		uartStop(&UARTDRIVER);
 		ucUsedPort = USART_INVALID_PORT;
 	}
 }

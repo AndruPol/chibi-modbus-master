@@ -129,5 +129,5 @@ void vMBMasterPortTimersDisable() {
 #endif
 
 void vMBMasterPortTimerClose(void) {
-	gptStop(&GPTDRIVER);
+	vMBMasterPortTimersDisable();
 }

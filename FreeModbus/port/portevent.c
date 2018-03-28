@@ -85,5 +85,9 @@ BOOL xMBPortEventGet(eMBEventType * peEvent) {
 }
 
 void vMBPortEventClose(void) {
-	chMBReset(&xSlaveQueueHdl);
+	if (bMBPortIsWithinException()) {
+		chMBResetI(&xSlaveQueueHdl);
+	} else {
+		chMBReset(&xSlaveQueueHdl);
+	}
 }
